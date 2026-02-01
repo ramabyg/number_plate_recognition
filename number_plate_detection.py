@@ -58,6 +58,7 @@ def prepare_pjt3_dataset(dataroot):
     # <Vehicle> <registration> <plate> <x_min> <y_min> <x_max> <y_max>
     
     data_set_dicts = []
+    bberror = False  # Flag to indicate bounding box error
     # Loop through all image files in the dataroot
     for img_filename in os.listdir(dataroot):
         if not img_filename.lower().endswith(('.png', '.jpg', '.jpeg')):
@@ -88,8 +89,17 @@ def prepare_pjt3_dataset(dataroot):
                             "iscrowd": 0
                         }
                         annos.append(obj)
+                        # do basic validation of bbox
+                        if x_min < 0 or y_min < 0 or x_max > width or y_max > height:
+                            print(f"Warning: Bounding box out of image bounds in file {label_file_path}")
+                            bberror = True
+        
         
         record["annotations"] = annos
+        if bberror:
+            print(f"Skipping image {img_path} due to bounding box errors.")
+            bberror = False  # Reset the flag for next image
+            continue
         data_set_dicts.append(record)
     return data_set_dicts
 
@@ -147,36 +157,99 @@ def main():
     #Part 2 : Retrain RetinaNet with custom dataset
     
     #update the default configuration for RetinaNet model
-    cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/retinanet_R_50_FPN_3x.yaml"))
-    cfg.DATASETS.TRAIN = ("pjt3_train")
-    cfg.DATASETS.TEST = ("pjt3_test")
-    cfg.DATALOADER.NUM_WORKERS = 2
-    cfg.MODEL.RETINANET.NUM_CLASSES = 1  # only one class 'number_plate'
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/retinanet_R_50_FPN_3x.yaml")  # use pre-trained weights
+    # cfg = get_cfg()
+    # cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/retinanet_R_50_FPN_3x.yaml"))
+    # cfg.DATASETS.TRAIN = ("pjt3_train")
+    # cfg.DATASETS.TEST = ("pjt3_test")
+    # cfg.DATALOADER.NUM_WORKERS = 2
+    # cfg.MODEL.RETINANET.NUM_CLASSES = 1  # only one class 'number_plate'
+    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/retinanet_R_50_FPN_3x.yaml")  # use pre-trained weights
     
+    # cfg.SOLVER.IMS_PER_BATCH = 2
+    # cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR
+    # cfg.SOLVER.MAX_ITER = 1000   # 1000 iterations TBD update it later
+    # cfg.MODEL.RETINANET.BBOX_REG_LOSS_TYPE = "smooth_l1"
+    # cfg.MODEL.RETINANET.SMOOTH_L1_BETA = 0.11
+    # cfg.MODEL.RETINANET.FOCAL_LOSS_GAMMA = 1.5
+    # cfg.MODEL.RETINANET.FOCAL_LOSS_ALPHA = 0.25
+    # cfg.OUTPUT_DIR = "./output_pjt3_retinanet"
+    # os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+    
+    # from detectron2.config import get_cfg
+    # from detectron2 import model_zoo
+
+    cfg = get_cfg()
+    cfg.merge_from_file(model_zoo.get_config_file(
+        "COCO-Detection/retinanet_R_50_FPN_3x.yaml"
+    ))
+
+    # -----------------------------
+    # DATASETS
+    # -----------------------------
+    cfg.DATASETS.TRAIN = ("pjt3_train",)
+    cfg.DATASETS.TEST = ("pjt3_test",)
+    cfg.DATALOADER.NUM_WORKERS = 2
+
+    # -----------------------------
+    # MODEL
+    # -----------------------------
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(
+        "COCO-Detection/retinanet_R_50_FPN_3x.yaml"
+    )
+    cfg.MODEL.RETINANET.NUM_CLASSES = 1   # number_plate
+
+    # --- CRITICAL FOR NUMBER PLATES ---
+    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[32, 64, 128, 256, 512]]
+    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.25, 0.5, 1.0, 2.0, 4.0]]
+
+    # -----------------------------
+    # INPUT RESOLUTION (IMPORTANT)
+    # -----------------------------
+    # cfg.INPUT.MIN_SIZE_TRAIN = (1024,)
+    # cfg.INPUT.MAX_SIZE_TRAIN = 1024
+    # cfg.INPUT.MIN_SIZE_TEST = 1024
+    # cfg.INPUT.MAX_SIZE_TEST = 1024
+
+    # -----------------------------
+    # SOLVER
+    # -----------------------------
     cfg.SOLVER.IMS_PER_BATCH = 2
-    cfg.SOLVER.BASE_LR = 0.00025  # pick a good LR
-    cfg.SOLVER.MAX_ITER = 1000   # 1000 iterations TBD update it later
+    cfg.SOLVER.BASE_LR = 0.00025
+    # cfg.SOLVER.AMP.ENABLED = True
+
+
+    # A reasonable schedule for 5k–10k images
+    cfg.SOLVER.MAX_ITER = 15000
+    cfg.SOLVER.STEPS = (10000, 13000)
+    cfg.SOLVER.GAMMA = 0.1
+
+    # -----------------------------
+    # RETINANET LOSS SETTINGS
+    # -----------------------------
     cfg.MODEL.RETINANET.BBOX_REG_LOSS_TYPE = "smooth_l1"
-    cfg.MODEL.RETINANET.SMOOTH_L1_BETA = 0.11
+    cfg.MODEL.RETINANET.SMOOTH_L1_BETA = 0.1
     cfg.MODEL.RETINANET.FOCAL_LOSS_GAMMA = 1.5
     cfg.MODEL.RETINANET.FOCAL_LOSS_ALPHA = 0.25
+
+    # -----------------------------
+    # OUTPUT
+    # -----------------------------
     cfg.OUTPUT_DIR = "./output_pjt3_retinanet"
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+
+
     
     #setup tensorboard logger
-    #tensorboard --logdir output_pjt3_retinanet
+    # tensorboard --logdir output_pjt3_retinanet
     
     #create trainer and start training
-    trainer = DefaultTrainer(cfg)
-    trainer.resume_or_load(resume=False) #TBD
-    trainer.train() #TBD
+    # trainer = DefaultTrainer(cfg)
+    # trainer.resume_or_load(resume=True) #TBD
+    # trainer.train() #TBD
     
     #Part 3 : Inference
     cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "model_final.pth")  # path to the model we just trained
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5   #
-    cfg.DATASETS.TEST = ("pjt3_test", )
+    cfg.DATASETS.TEST = ("pjt3_test",)
     predictor = DefaultPredictor(cfg)
     dataset_dicts = DatasetCatalog.get("pjt3_test")
     for d in random.sample(dataset_dicts, 3):
@@ -186,15 +259,26 @@ def main():
                        metadata=pjt3_metadata,
                        scale=0.5
         )
-        out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        #draw the prediction with higher confidence score
+        out = v.draw_instance_predictions(outputs["instances"].to("cpu")[0])
         plt.figure(figsize=(15,10))
         plt.imshow(out.get_image())
         plt.show()
     
     pause = 1  # Debug pause
-    input("Press Enter to continue...")   
-    cv2.waitKey(1)
+    # input("Press Enter to continue...")   
+    # cv2.waitKey(1)
     print("Inference completed")
+    
+    
+    # Part 4: Model evaluation using COCO metrics
+    eval_dir = os.path.join(cfg.OUTPUT_DIR, 'coco_eval')
+    evaluator = COCOEvaluator("pjt3_test", cfg, False, output_dir=eval_dir)
+    val_loader = build_detection_test_loader(cfg, 'pjt3_test')
+    print("Starting model evaluation...")
+    inference_on_dataset(predictor.model, val_loader, evaluator)
+    print("Model evaluation completed.")
+    
     
     
     
