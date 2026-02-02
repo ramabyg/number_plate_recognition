@@ -1,0 +1,24 @@
+# Paths Configuration for Number Plate Detection Project
+
+# Data paths
+DATA:
+  TRAIN_ROOT: "/mnt/rama_ml/data/num_plt_reco_opencv_dl_pytch_wk10_pjt/train"
+  TEST_ROOT: "/mnt/rama_ml/data/num_plt_reco_opencv_dl_pytch_wk10_pjt/validation"
+  CACHE_DIR: ".cache"
+
+# Output directories
+OUTPUT:
+  MODEL_DIR: "./output_pjt3_retinanet"
+  TF_EVENTS_DIR: "./tf_events"
+  COCO_EVAL_DIR: "./output_pjt3_retinanet/coco_eval"
+
+# Cache files
+CACHE:
+  TRAIN_DICT_FILE: "train_data_set_dict.pkl"
+  TEST_DICT_FILE: "test_data_set_dict.pkl"
+
+# Model checkpoints
+MODEL:
+  BASE_CONFIG: "COCO-Detection/retinanet_R_50_FPN_3x.yaml"
+  FINAL_WEIGHTS: "model_final.pth"
+  SCORE_THRESH_TEST: 0.5

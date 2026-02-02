@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific rules
+
+# Cache files for dataset
+*.pkl
+.cache/
+
+# Model output - exclude large .pth files but keep structure
+output_pjt3_retinanet/*.pth
+output_pjt3_retinanet/last_checkpoint
+output_pjt3_retinanet/metrics.json
+output_pjt3_retinanet/coco_eval/coco_instances_results.json
+output_pjt3_retinanet/coco_eval/instances_predictions.pth
+
+# Keep TensorFlow events directory for analysis
+# tf_events/ is NOT ignored - we want to track it
+!tf_events/
+tf_events/**/.gitkeep

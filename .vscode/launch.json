@@ -9,7 +9,7 @@
             "name": "Debug Number Plate Recognition",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/number_plate_detection.py",
+            "program": "${workspaceFolder}/number_plate_detection_refactored.py",
             "console": "integratedTerminal",
             "stopOnEntry": true, 
             //select python interpreter with number plate recognition dependencies

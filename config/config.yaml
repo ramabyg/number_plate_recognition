@@ -1,0 +1,14 @@
+# Configuration for Number Plate Detection
+
+model:
+  name: "number_plate_model"
+  version: "1.0"
+
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.001
+
+paths:
+  dataset: "path/to/dataset"
+  output: "output_pjt3_retinanet/"
