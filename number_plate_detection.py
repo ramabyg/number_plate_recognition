@@ -205,10 +205,10 @@ def main():
     # -----------------------------
     # INPUT RESOLUTION (IMPORTANT)
     # -----------------------------
-    # cfg.INPUT.MIN_SIZE_TRAIN = (1024,)
-    # cfg.INPUT.MAX_SIZE_TRAIN = 1024
-    # cfg.INPUT.MIN_SIZE_TEST = 1024
-    # cfg.INPUT.MAX_SIZE_TEST = 1024
+    cfg.INPUT.MIN_SIZE_TRAIN = (1024,)
+    cfg.INPUT.MAX_SIZE_TRAIN = 1024
+    cfg.INPUT.MIN_SIZE_TEST = 1024
+    cfg.INPUT.MAX_SIZE_TEST = 1024
 
     # -----------------------------
     # SOLVER
@@ -219,8 +219,8 @@ def main():
 
 
     # A reasonable schedule for 5k–10k images
-    cfg.SOLVER.MAX_ITER = 15000
-    cfg.SOLVER.STEPS = (10000, 13000)
+    cfg.SOLVER.MAX_ITER = 25000
+    cfg.SOLVER.STEPS = (10000, 13000, 18000, 22000)
     cfg.SOLVER.GAMMA = 0.1
 
     # -----------------------------
@@ -242,9 +242,9 @@ def main():
     # tensorboard --logdir output_pjt3_retinanet
     
     #create trainer and start training
-    # trainer = DefaultTrainer(cfg)
-    # trainer.resume_or_load(resume=True) #TBD
-    # trainer.train() #TBD
+    trainer = DefaultTrainer(cfg)
+    trainer.resume_or_load(resume=True) #TBD
+    trainer.train() #TBD
     
     #Part 3 : Inference
     cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "model_final.pth")  # path to the model we just trained
