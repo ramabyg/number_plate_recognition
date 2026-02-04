@@ -1,0 +1,37 @@
+_BASE_: "COCO-Detection/retinanet_R_50_FPN_3x.yaml"
+
+DATASETS:
+  TRAIN: ("pjt3_train",)
+  TEST: ("pjt3_test",)
+
+DATALOADER:
+  NUM_WORKERS: 2
+
+MODEL:
+  WEIGHTS: "detectron2://COCO-Detection/retinanet_R_50_FPN_3x/137849486/model_final_f10217.pkl"
+  RETINANET:
+    NUM_CLASSES: 1
+    BBOX_REG_LOSS_TYPE: "smooth_l1"
+    SMOOTH_L1_BETA: 0.1
+    FOCAL_LOSS_GAMMA: 1.5
+    FOCAL_LOSS_ALPHA: 0.25
+  ANCHOR_GENERATOR:
+    SIZES: [[32, 64, 128, 256, 512]]
+    ASPECT_RATIOS: [[0.25, 0.5, 1.0, 2.0, 4.0]]
+
+INPUT:
+  MIN_SIZE_TRAIN: (1024,)
+  MAX_SIZE_TRAIN: 1024
+  MIN_SIZE_TEST: 1024
+  MAX_SIZE_TEST: 1024
+
+SOLVER:
+  IMS_PER_BATCH: 2
+  BASE_LR: 0.00025
+  MAX_ITER: 25000
+  STEPS: (10000, 13000, 18000, 22000)
+  GAMMA: 0.1
+  # AMP:
+  #   ENABLED: True
+
+OUTPUT_DIR: "./output_pjt3_retinanet"

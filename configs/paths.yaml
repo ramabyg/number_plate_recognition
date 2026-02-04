@@ -1,0 +1,28 @@
+# Paths Configuration for Number Plate Detection Project
+
+# Data paths
+DATA:
+  TRAIN_ROOT: "/mnt/rama_ml/data/num_plt_reco_opencv_dl_pytch_wk10_pjt/train"
+  TEST_ROOT: "/mnt/rama_ml/data/num_plt_reco_opencv_dl_pytch_wk10_pjt/validation"
+  TEST_VIDEO_PATH: "/mnt/rama_ml/data/num_plt_reco_opencv_dl_pytch_wk10_pjt/projet3-input-video.mp4"
+  CACHE_DIR: ".cache"
+
+# Output directories
+# Will be created inside the OUTPUT_DIR defined in config.yaml
+OUTPUT:
+  MODEL_DIR: "models"
+  TF_EVENTS_DIR: "tf_events"
+  COCO_EVAL_DIR: "coco_eval"
+  INFERENCE_DIR: "inference_results"
+
+# Cache files
+CACHE:
+  TRAIN_DICT_FILE: "train_data_set_dict.pkl"
+  TEST_DICT_FILE: "test_data_set_dict.pkl"
+
+# Output MODEL derails
+MODEL:
+  FINAL_WEIGHTS_FILE: "model_final.pth"
+  BEST_WEIGHTS_FILE: "model_best.pth"
+  SCORE_THRESH_TEST: 0.5
+  COCO_EVAL_FILE: "coco_evaluation.json"

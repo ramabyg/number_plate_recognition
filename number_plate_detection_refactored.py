@@ -7,6 +7,7 @@
 # 4. Evaluate model performance COCO detection metrics
 # 5. Run inference on video
 
+from logging import config
 import matplotlib
 matplotlib.use('TkAgg') # or 'Qt5Agg', 'GTK3Agg', 'WXAgg'
 import detectron2
@@ -51,7 +52,7 @@ from detectron2.data import build_detection_test_loader
 
 def load_config():
     """Load configuration from YAML files."""
-    with open('config/paths.yaml', 'r') as f:
+    with open('configs/paths.yaml', 'r') as f:
         paths_config = yaml.safe_load(f)
     return paths_config
 
@@ -153,34 +154,43 @@ def load_or_prepare_dataset(config):
     return train_data_set_dict, test_data_set_dict
 
 
-def setup_config(config):
+def setup_config(training_config, project_config):
     """
     Setup detectron2 configuration.
     
     Args:
-        config: Configuration dictionary from YAML
+        training_config: Path to training config file
+        project_config: Project configuration dictionary from YAML
         
     Returns:
         detectron2 cfg object
     """
-    # Load base RetinaNet config
+    
+    if not os.path.exists(training_config):
+        raise FileNotFoundError(f"Configuration file {training_config} not found.")
+    
+    # Load base config from detectron2 model zoo
     cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/retinanet_R_50_FPN_3x.yaml"))
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
     
     # Merge custom config from YAML
-    cfg.merge_from_file("config/retinanet_config.yaml")
+    cfg.merge_from_file(training_config)
+    
     
     # Set model weights from pretrained checkpoint
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/retinanet_R_50_FPN_3x.yaml")
+    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/retinanet_R_50_FPN_3x.yaml")
     
     # Update output directory
-    cfg.OUTPUT_DIR = config['OUTPUT']['MODEL_DIR']
+    with open(training_config, 'r') as f:
+        training_configconfig = yaml.safe_load(f)
+    cfg.OUTPUT_DIR = os.path.join(project_config['OUTPUT']['MODEL_DIR'], training_configconfig['OUTPUT_DIR'])
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+    cfg.freeze()
     
-    print(f"Configuration loaded from: config/retinanet_config.yaml")
+    print(f"Configuration loaded from: {training_config}")
     print(f"Output directory: {cfg.OUTPUT_DIR}")
     
-    return cfg
+    return cfg, training_configconfig['OUTPUT_DIR']
 
 
 def register_datasets(train_data_set_dict, test_data_set_dict):
@@ -214,6 +224,82 @@ def train_model(cfg, tf_events_dir):
     print("\nTraining completed!")
     print(f"Model checkpoints saved to: {cfg.OUTPUT_DIR}")
 
+# ===== Extra: Video read and write function =====
+def video_read_write(cfg, config, pjt3_metadata,video_path):
+    """
+    Read video frames one-by-one, flip it, and write in the other video.
+    video_path (str): path/to/video
+    """
+    video = cv2.VideoCapture(video_path)
+    
+    # Check if camera opened successfully
+    if not video.isOpened(): 
+        print("Error opening video file")
+        return
+    
+    # create video writer
+    width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frames_per_second = video.get(cv2.CAP_PROP_FPS)
+    num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    output_fname = '{}_out.mp4'.format(os.path.splitext(video_path)[0])
+    
+    output_file = cv2.VideoWriter(
+        filename=output_fname,
+        # some installation of opencv may not support x264 (due to its license),
+        # you can try other format (e.g. MPEG)
+        fourcc=cv2.VideoWriter_fourcc(*"MPEG"),
+        fps=float(frames_per_second),
+        frameSize=(width, height),
+        isColor=True,
+    )
+    
+    #Inference logic
+    
+    print("\n" + "="*60)
+    print("PART 4: Running inference on video file")
+    print("="*60)
+    #unfreeze cfg to modify for inference
+    cfg.defrost()
+    cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, config['MODEL']['FINAL_WEIGHTS_FILE'])
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = config['MODEL']['SCORE_THRESH_TEST']
+    # cfg.DATASETS.TEST = ("pjt3_test",)
+    cfg.freeze()
+    
+    predictor = DefaultPredictor(cfg)
+    # dataset_dicts = DatasetCatalog.get("pjt3_test")
+    
+    i = 0
+    while video.isOpened():
+        ret, frame = video.read()
+        if ret:
+            outputs = predictor(frame)
+            v = Visualizer(frame[:, :, ::-1],
+                           metadata=pjt3_metadata,
+                           scale=1.0
+            )
+            # Draw the prediction with higher confidence score
+            #check if there are any instances detected
+            if len(outputs["instances"]) == 0:
+                print(f"No instances detected in frame {i}")
+                output_file.write(frame)
+#                 cv2.imwrite('anpd_out/frame_{}.png'.format(str(i).zfill(3)), frame[:, ::-1, :])
+                i += 1
+                continue
+            print(f"Instances detected in frame {i}: {len(outputs['instances'])}")
+            out = v.draw_instance_predictions(outputs["instances"].to("cpu")[0])
+            frame = out.get_image()[:, :, ::-1]           
+            output_file.write(frame)
+#             cv2.imwrite('anpd_out/frame_{}.png'.format(str(i).zfill(3)), frame[:, ::-1, :])
+            i += 1
+        else:
+            break
+        
+    video.release()
+    output_file.release()
+    
+    return
 
 def run_inference(cfg, config, pjt3_metadata):
     """
@@ -227,10 +313,12 @@ def run_inference(cfg, config, pjt3_metadata):
     print("\n" + "="*60)
     print("PART 3: Running inference on test dataset")
     print("="*60)
-    
-    cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, config['MODEL']['FINAL_WEIGHTS'])
+    #unfreeze cfg to modify for inference
+    cfg.defrost()
+    cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, config['MODEL']['FINAL_WEIGHTS_FILE'])
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = config['MODEL']['SCORE_THRESH_TEST']
     cfg.DATASETS.TEST = ("pjt3_test",)
+    cfg.freeze()
     
     predictor = DefaultPredictor(cfg)
     dataset_dicts = DatasetCatalog.get("pjt3_test")
@@ -243,10 +331,27 @@ def run_inference(cfg, config, pjt3_metadata):
                        scale=0.5
         )
         # Draw the prediction with higher confidence score
-        out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        #check if there are any instances detected
+        if len(outputs["instances"]) == 0:
+            print(f"No instances detected in image {d['file_name']}")
+            continue
+        out = v.draw_instance_predictions(outputs["instances"].to("cpu")[0])
         plt.figure(figsize=(15, 10))
-        plt.imshow(out.get_image()[:, :, ::-1])
+        plt.imshow(out.get_image())
         plt.show()
+        cv2.waitKey(0)
+        # pause = input("Press Enter to continue to next image...")
+        
+        
+        plt.axis('off')
+        plt.tight_layout()
+        output_path = f"prediction_{d['file_name'].split('/')[-1]}"
+        output_dir = os.path.join(config['OUTPUT']['INFERENCE_DIR'])
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, output_path)
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"Saved prediction image to {output_path}")
     
     print("Inference completed!")
     return predictor
@@ -280,33 +385,51 @@ def evaluate_model(cfg, config, predictor):
 def main():
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     
-    # Load configuration
-    config = load_config()
-    tf_events_dir = config['OUTPUT']['TF_EVENTS_DIR']
+    #get the training configuration from command line argument
+    # if not, use the default config file
+    import argparse
+    parser = argparse.ArgumentParser(description="Number Plate Detection with Detectron2")
+    parser.add_argument("-c", "--config", type=str, default="config/retinanet_config.yaml",
+                        help="Path to the configuration YAML file")
+    args = parser.parse_args()
+    training_config = args.config
+    
+    # Load configuration for fixed paths
+    project_config = load_config()
+    # tf_events_dir = config['OUTPUT']['TF_EVENTS_DIR']
     
     # Create necessary directories
-    os.makedirs(tf_events_dir, exist_ok=True)
+    # os.makedirs(tf_events_dir, exist_ok=True)
     
     # Clear CUDA cache
     torch.cuda.empty_cache()
     
     # ===== Load or Prepare Dataset =====
-    train_data_set_dict, test_data_set_dict = load_or_prepare_dataset(config)
+    train_data_set_dict, test_data_set_dict = load_or_prepare_dataset(project_config)
     
     # ===== Register Datasets =====
     pjt3_metadata = register_datasets(train_data_set_dict, test_data_set_dict)
     
     # ===== Setup Configuration =====
-    cfg = setup_config(config)
+    cfg, output_dir = setup_config(training_config, project_config)
     
     # ===== PART 2: Train Model =====
-    train_model(cfg, tf_events_dir)
+    tf_events_dir = os.path.join(output_dir, project_config['OUTPUT']['TF_EVENTS_DIR'])
+    os.makedirs(tf_events_dir, exist_ok=True)
+    # train_model(cfg, tf_events_dir)
     
     # ===== PART 3: Run Inference =====
-    predictor = run_inference(cfg, config, pjt3_metadata)
+    # predictor = run_inference(cfg, project_config, pjt3_metadata)
     
     # ===== PART 4: Evaluate Model =====
-    evaluate_model(cfg, config, predictor)
+    # evaluate_model(cfg, project_config, predictor)
+    
+    # ===== Extra: Run Inference on Video =====
+    video_path = project_config['DATA']['TEST_VIDEO_PATH']
+    if os.path.exists(video_path):
+        video_read_write(cfg, project_config, pjt3_metadata, video_path)
+    else:
+        print(f"Test video path {video_path} does not exist. Skipping video inference.")
     
     print("\n" + "="*60)
     print("All processes completed successfully!")

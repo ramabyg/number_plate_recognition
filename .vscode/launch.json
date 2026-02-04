@@ -10,6 +10,10 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/number_plate_detection_refactored.py",
+            "args": [
+                "-c",
+                "configs/faster_rcnn.yaml",
+            ],
             "console": "integratedTerminal",
             "stopOnEntry": true, 
             //select python interpreter with number plate recognition dependencies
